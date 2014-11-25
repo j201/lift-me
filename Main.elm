@@ -1,5 +1,6 @@
 module Main where
 
+import ColorUtils(..)
 import Mouse
 import Debug
 
@@ -132,7 +133,9 @@ cursorTrace src tgts (x,y) = let crossings = sortBy (\(Just (_,y)) -> y) <|
 draw : View -> Game -> (Int, Int) -> Element
 draw v g (mx, my) = collage (truncate v.w) (truncate v.h)
                             [filled bgColour (rect v.w v.h),
-                             traced (solid lightRed) (segment (toPoint g.me) (toFloat mx - v.w/2, v.h/2 - toFloat my)),
+                             case cursorTrace g.me g.platforms (mx,my) of
+                                 Just (x,y) -> traced (solid lightRed) (segment (toPoint g.me) (toFloat x - v.w/2, v.h/2 - toFloat y)),
+                                 Nothing -> traced (solid $ modifyColour (Alpha, 0.5) lightRed) (segment (toPoint g.me) (toFloat mx - v.w/2, v.h/2 - toFloat my)),
                              filledBox v groundColour { x = 0, y = -v.h/2 - meWidth/2, w = v.w, h = v.h },
                              group <| map (filledBox v platformColour) g.platforms,
                              group <| map (drawRod v g.me) g.me.rods,
