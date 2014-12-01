@@ -7,8 +7,9 @@ import Debug
 log x = Debug.log (show x) x
 
 type Positioned a = { a | x: Float, y: Float }
-type Moving a = Positioned { a | dx: Float, dy: Float } -- Velocities in px/s
-type Box a = Positioned { a | w: Float, h: Float }
+type Moving a = { a | x: Float, y: Float, dx: Float, dy: Float } -- Velocities in px/s
+type Box a = { a | x: Float, y: Float, w: Float, h: Float }
+type MovingBox a = { a | x: Float, y: Float, dx: Float, dy: Float, w: Float, h: Float } -- TODO: find a clean way of doing this
 
 updateMoving : Float -> Moving a -> Moving a
 updateMoving dt p = { p | x <- p.x + dt * p.dx,
@@ -19,7 +20,7 @@ type Rod = Positioned { lengthFrac: Float, state: RodState }
 
 type Me = Moving { rods: [Rod] }
 
-type Platform = Moving (Box {})
+type Platform = MovingBox {}
 
 type View = Box {}
 
@@ -44,12 +45,16 @@ biggestHole = let size (x, y) = y - x
                                                    else candidate
               in bhSorted << sort 
 
-defaultView = { x = 0, y = 0, w = 600, h = 400 }
+canvasWidth = 600
+canvasHeight = 400
+
+defaultView = { x = 0, y = 0, w = canvasWidth, h = canvasHeight }
 
 initial : Game
-initial = { view = { x = 0, y = 0, w = 600, h = 400 },
+initial = { view = defaultView,
             me = { x = 0, y = 0, dx = 0, dy = 0, rods = [] },
-            platforms = [],
+            platforms = [{ x = 0, y = 100, dx = 0, dy = 0, w = 100, h = 10 },
+                         { x = 50, y = 150, dx = 0, dy = 0, w = 300, h = 10 }],
             timeSinceAdded = 0 }
 
 game = constant initial
@@ -107,6 +112,12 @@ lineFrac frac (x1, y1) (x2, y2) = (x1 + (x2 - x1) * frac,
 toPoint : Positioned a -> Point
 toPoint p = (p.x, p.y)
 
+toFloatPoint : (Int, Int) -> Point
+toFloatPoint (x,y) = (toFloat x, toFloat y)
+
+toGameCoords : View -> Point -> Point
+toGameCoords {x,y,w,h} (px,py) = (x + px - w/2, y - py + h/2)
+
 drawRod : View -> Me -> Rod -> Form
 drawRod me v rod = traced (solid rodColour) <|
                    segment (toPoint me) <|
@@ -116,13 +127,15 @@ drawRod me v rod = traced (solid rodColour) <|
 lineInverse : Point -> Point -> Float -> Float
 lineInverse (x1,y1) (x2,y2) y = x1 + (y-y1)*(x2-x1)/(y2-y1)
 
-findXCrossing : Positioned a -> (Int, Int) -> Box b -> Maybe Point
-findXCrossing src (x,y) tgt = let xCrossing = lineInverse (src.x, src.y) (toFloat x, toFloat y) tgt.y
-                              in if tgt.x <= xCrossing && tgt.x + tgt.w >= xCrossing
+findXCrossing : Positioned a -> Point -> Box b -> Maybe Point
+findXCrossing src (x,y) tgt = let xCrossing = lineInverse (src.x, src.y) (x,y) tgt.y
+                              in if tgt.x - tgt.w/2 <= xCrossing &&
+                                    tgt.x + tgt.w/2 >= xCrossing &&
+                                    (y > src.y) == (tgt.y > src.y)
                                  then Just (xCrossing, tgt.y)
                                  else Nothing
 
-cursorTrace : Positioned a -> [Box b] -> (Int, Int) -> Maybe Point
+cursorTrace : Positioned a -> [Box b] -> Point -> Maybe Point
 cursorTrace src tgts (x,y) = let crossings = sortBy (\(Just (_,y)) -> y) <|
                                              filter ((/=) Nothing) <|
                                              map (findXCrossing src (x,y)) tgts
@@ -133,9 +146,9 @@ cursorTrace src tgts (x,y) = let crossings = sortBy (\(Just (_,y)) -> y) <|
 draw : View -> Game -> (Int, Int) -> Element
 draw v g (mx, my) = collage (truncate v.w) (truncate v.h)
                             [filled bgColour (rect v.w v.h),
-                             case cursorTrace g.me g.platforms (mx,my) of
-                                 Just (x,y) -> traced (solid lightRed) (segment (toPoint g.me) (x - v.w/2, v.h/2 - y))
-                                 Nothing -> traced (solid <| modifyColour (Alpha, 0.5) lightRed) (segment (toPoint g.me) (toFloat mx - v.w/2, v.h/2 - toFloat my)),
+                             case cursorTrace g.me g.platforms <| toGameCoords v <| toFloatPoint (mx,my) of
+                                 Just (x,y) -> traced (solid lightRed) (segment (toPoint g.me) (x,y))
+                                 Nothing -> traced (solid <| modifyColour (Lightness, 0.8) lightRed) (segment (toPoint g.me) (toFloat mx - v.w/2, v.h/2 - toFloat my)),
                              filledBox v groundColour { x = 0, y = -v.h/2 - meWidth/2, w = v.w, h = v.h },
                              group <| map (filledBox v platformColour) g.platforms,
                              group <| map (drawRod v g.me) g.me.rods,
