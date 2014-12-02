@@ -26,14 +26,15 @@ type View = Box {}
 
 type Game = { view: View, me: Me, platforms: [Platform], timeSinceAdded: Time }
 
-type Inputs = { newRod: Maybe Rod }
+type Inputs = { dt: Float }
 
 overlap : Box a -> Box b -> Bool
 overlap a b = let linearOverlap s1 e1 s2 e2 = (s1 <= s2 && e1 >= s2) || (s2 <= s1 && e2 >= s1) 
               in linearOverlap a.x (a.x + a.w) b.x (b.x + b.w) &&
                  linearOverlap a.y (a.y + a.h) b.y (b.y + b.h)
 
-timeBetweenPlatforms = 1
+timeBetweenPlatforms = 6000
+platformSpeed = 0.05
 
 biggestHole : [Float] -> (Float, Float)
 biggestHole = let size (x, y) = y - x
@@ -53,11 +54,9 @@ defaultView = { x = 0, y = 0, w = canvasWidth, h = canvasHeight }
 initial : Game
 initial = { view = defaultView,
             me = { x = 0, y = 0, dx = 0, dy = 0, rods = [] },
-            platforms = [{ x = 0, y = 100, dx = 0, dy = 0, w = 100, h = 10 },
-                         { x = 50, y = 150, dx = 0, dy = 0, w = 300, h = 10 }],
-            timeSinceAdded = 0 }
-
-game = constant initial
+            platforms = [{ x = 0, y = 100, dx = -platformSpeed, dy = 0, w = 100, h = 10 },
+                         { x = 50, y = 150, dx = -platformSpeed, dy = 0, w = 300, h = 10 }],
+            timeSinceAdded = timeBetweenPlatforms }
 
 -- Physics
 
@@ -79,15 +78,26 @@ updateVelocity dt me = let connectedRods = filter (.state >> ((==) Connected)) m
                                      (ax, ay) = connectedAcceleration me rod
                                  in { me | dx <- me.dx + ax * dt, dy <- me.dy + ay * dt }
 
--- -- Remove any invisible platforms, add new ones if there's space, move the rest
--- updatePlatforms : Float -> Game -> Game
--- updatePlatforms dt s = let shouldAddNew = s.timeSinceAdded >= timeBetweenPlatforms
---                            addNew ps = if shouldAddNew
---                                        then 
---                                        -- find the biggest space and stick it in, with a bit of fuzzing
---                                        else ps
---                        in { s | platforms <- addNew <| filter (overlap s.view) <| map (updateMoving dt) s.platforms,
---                                 timeSinceAdded <- if shouldAddNew then 0 else s.timeSinceAdded + dt}
+-- Updates
+
+removeInvisible : View -> [Box a] -> [Box a]
+removeInvisible v = filter (\b -> b.x + b.w/2 > v.x - v.w/2 &&
+                                  b.x - b.w/2 < v.x + v.w/2 &&
+                                  b.y + b.h/2 > v.y - v.h/2 &&
+                                  b.y - b.h/2 < v.y + v.h/2)
+
+-- Remove any invisible platforms, add new ones if there's space, move the rest
+updatePlatforms : Float -> Game -> Game
+updatePlatforms dt g = let shouldAddNew = g.timeSinceAdded >= timeBetweenPlatforms
+                           addNew ps = if shouldAddNew
+                                       then { x = g.view.w/2 + 75, y = 100, dx = -platformSpeed, dy = 0, w = 150, h = 10 } :: ps
+                                       else ps
+                       in { g | platforms <- addNew <| removeInvisible g.view <| map (updateMoving dt) g.platforms,
+                                timeSinceAdded <- if shouldAddNew then 0 else g.timeSinceAdded + dt}
+
+
+runGame : Inputs -> Game -> Game
+runGame {dt} g = updatePlatforms dt { g | me <- updateMoving dt g.me }
 
 -- Drawing
 
@@ -143,16 +153,20 @@ cursorTrace src tgts (x,y) = let crossings = sortBy (\(Just (_,y)) -> y) <|
                                 then Nothing
                                 else head crossings
 
-draw : View -> Game -> (Int, Int) -> Element
-draw v g (mx, my) = collage (truncate v.w) (truncate v.h)
-                            [filled bgColour (rect v.w v.h),
-                             case cursorTrace g.me g.platforms <| toGameCoords v <| toFloatPoint (mx,my) of
-                                 Just (x,y) -> traced (solid lightRed) (segment (toPoint g.me) (x,y))
-                                 Nothing -> traced (solid <| modifyColour (Lightness, 0.8) lightRed) (segment (toPoint g.me) (toFloat mx - v.w/2, v.h/2 - toFloat my)),
-                             filledBox v groundColour { x = 0, y = -v.h/2 - meWidth/2, w = v.w, h = v.h },
-                             group <| map (filledBox v platformColour) g.platforms,
-                             group <| map (drawRod v g.me) g.me.rods,
-                             filledBox v meColour { x = g.me.x, y = g.me.y, w = meWidth, h = meWidth }]
+draw : Game -> (Int, Int) -> Element
+draw g (mx, my) = collage (truncate g.view.w) (truncate g.view.h)
+                          [filled bgColour (rect g.view.w g.view.h),
+                           case cursorTrace g.me g.platforms <| toGameCoords g.view <| toFloatPoint (mx,my) of
+                               Just (x,y) -> traced (solid lightRed) (segment (toPoint g.me) (x,y))
+                               Nothing -> traced (solid <| modifyColour (Lightness, 0.8) lightRed) (segment (toPoint g.me) (toFloat mx - g.view.w/2, g.view.h/2 - toFloat my)),
+                           filledBox g.view groundColour { x = 0, y = -g.view.h/2 - meWidth/2, w = g.view.w, h = g.view.h },
+                           group <| map (filledBox g.view platformColour) g.platforms,
+                           group <| map (drawRod g.view g.me) g.me.rods,
+                           filledBox g.view meColour { x = g.me.x, y = g.me.y, w = meWidth, h = meWidth }]
+
+-- Inputs
+inputs : Signal Inputs
+inputs = lift (\dt -> { dt = dt }) (fps 30)
 
 main : Signal Element
-main = lift2 (draw defaultView) game Mouse.position
+main = lift2 draw (foldp (<|) initial (lift runGame inputs)) Mouse.position
