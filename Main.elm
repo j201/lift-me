@@ -26,7 +26,7 @@ type View = Box {}
 
 type Game = { view: View, me: Me, platforms: [Platform], timeSinceAdded: Time }
 
-type Inputs = { dt: Float }
+type Inputs = { dt: Float, rodTarget: Maybe (Float, Float) }
 
 overlap : Box a -> Box b -> Bool
 overlap a b = let linearOverlap s1 e1 s2 e2 = (s1 <= s2 && e1 >= s2) || (s2 <= s1 && e2 >= s1) 
@@ -95,9 +95,15 @@ updatePlatforms dt g = let shouldAddNew = g.timeSinceAdded >= timeBetweenPlatfor
                        in { g | platforms <- addNew <| removeInvisible g.view <| map (updateMoving dt) g.platforms,
                                 timeSinceAdded <- if shouldAddNew then 0 else g.timeSinceAdded + dt}
 
+updateMe : Float -> Maybe (Float, Float) -> Game -> Game
+updateMe dt rt g = let moved = updateMoving dt g.me
+                   in case rt of
+                       (Just (x,y)) -> { g | me <- { moved | rods <- [{ x = x, y = y, lengthFrac = 1, state = Connecting }] } }
+                       Nothing -> { g | me <- moved }
 
 runGame : Inputs -> Game -> Game
-runGame {dt} g = updatePlatforms dt { g | me <- updateMoving dt g.me }
+runGame {dt, rodTarget} g = updatePlatforms dt <|
+                            updateMe dt rodTarget g
 
 -- Drawing
 
@@ -166,7 +172,15 @@ draw g (mx, my) = collage (truncate g.view.w) (truncate g.view.h)
 
 -- Inputs
 inputs : Signal Inputs
-inputs = lift (\dt -> { dt = dt }) (fps 30)
+inputs = let ticker = fps 30
+         in lift2 (\dt rt -> { dt = dt, rodTarget = rt })
+                  ticker
+                  (lift fst <|
+                   foldp (\newPos (m, pos) -> if pos == newPos
+                                              then (Nothing, pos)
+                                              else (Just <| toGameCoords defaultView <| toFloatPoint newPos, newPos)) -- TODO: defaultView
+                         (Nothing, (0, 0))
+                         (sampleOn ticker <| sampleOn Mouse.clicks Mouse.position))
 
 main : Signal Element
 main = lift2 draw (foldp (<|) initial (lift runGame inputs)) Mouse.position
