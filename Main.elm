@@ -19,7 +19,7 @@ updateMoving dt p = { p | x <- p.x + dt * p.dx,
 data RodState = Connecting | Connected | Disconnecting
 type Rod = Positioned { lengthFrac: Float, state: RodState }
 
-type Me = Moving { rods: [Rod] }
+type Me = Moving { rod: Maybe Rod }
 
 type Platform = MovingBox {}
 
@@ -54,7 +54,7 @@ defaultView = { x = 0, y = 0, w = canvasWidth, h = canvasHeight }
 
 initial : Game
 initial = { view = defaultView,
-            me = { x = 0, y = 0, dx = 0, dy = 0, rods = [] },
+            me = { x = 0, y = 0, dx = 0, dy = 0, rod = Nothing },
             platforms = [{ x = 0, y = 100, dx = -platformSpeed, dy = 0, w = 100, h = 10 },
                          { x = 50, y = 150, dx = -platformSpeed, dy = 0, w = 300, h = 10 }],
             timeSinceAdded = timeBetweenPlatforms }
@@ -62,7 +62,10 @@ initial = { view = defaultView,
 -- Physics
 
 gravity = 0.3
-meMass = 1
+meMass = 200
+rodRestLength = 8
+rodElasticity = 0.001 -- not sure why it has to be so low
+damping = 0.01
 
 connectedAcceleration : Me -> Rod -> (Float, Float)
 connectedAcceleration me rod = let theta = snd <| toPolar (rod.x - me.x, rod.y - me.y)
@@ -70,14 +73,29 @@ connectedAcceleration me rod = let theta = snd <| toPolar (rod.x - me.x, rod.y -
                                in fromPolar (meMass * gravity * cost,
                                              if cost > 0 then theta - (pi/2) else theta + (pi/2))
 
-updateVelocity : Float -> Me -> Me
-updateVelocity dt me = let connectedRods = filter (.state >> ((==) Connected)) me.rods
-                       in if | me.y == 0 -> { me | dx <- 0, dy <- 0 }
-                             | connectedRods == [] -> { me | dy <- me.dy + gravity * dt }
-                             | otherwise ->
-                                 let rod = head connectedRods -- Only calculates from one rod
-                                     (ax, ay) = connectedAcceleration me rod
-                                 in { me | dx <- me.dx + ax * dt, dy <- me.dy + ay * dt }
+applyGravity : Float -> Me -> Me
+applyGravity dt me = if me.y == 0 then { me | dx <- 0, dy <- 0 }
+                     else case me.rod of
+                            Nothing -> { me | dy <- me.dy + gravity * dt }
+                            (Just rod) -> let (ax, ay) = connectedAcceleration me rod
+                                          in { me | dx <- me.dx + ax * dt, dy <- me.dy + ay * dt }
+
+posDistance : Positioned a -> Positioned b -> Float
+posDistance p1 p2 = sqrt ((p1.x-p2.x) ^ 2 + (p1.y-p2.y) ^ 2)
+
+unitVector : Positioned a -> Positioned b -> Point
+unitVector from to = let dist = posDistance from to
+                     in ((to.x-from.x) / dist, (to.y-from.y) / dist)
+
+applyRodForce : Float -> Me -> Me
+applyRodForce dt me = case me.rod of
+                        Nothing -> me
+                        (Just rod) -> let len = posDistance me rod
+                                      in if len <= rodRestLength
+                                         then me
+                                         else let acc = len * rodElasticity / meMass
+                                                  (ux, uy) = unitVector me rod
+                                              in { me | dx <- me.dx + acc * ux * dt, dy <- me.dy + acc * uy * dt }
 
 -- Updates
 
@@ -96,11 +114,20 @@ updatePlatforms dt g = let shouldAddNew = g.timeSinceAdded >= timeBetweenPlatfor
                        in { g | platforms <- addNew <| removeInvisible g.view <| map (updateMoving dt) g.platforms,
                                 timeSinceAdded <- if shouldAddNew then 0 else g.timeSinceAdded + dt}
 
+updateRod : Float -> Me -> Me
+updateRod dt me = case me.rod of
+                    Nothing -> me
+                    (Just rod) -> let newRod = { rod | x <- rod.x - platformSpeed * dt }
+                                  in { me | rod <- Just newRod }
+
 updateMe : Float -> Maybe Point -> Game -> Game
-updateMe dt rt g = let moved = updateMoving dt g.me
+updateMe dt rt g = let moved = updateMoving dt <|
+                               -- applyGravity dt <|
+                               applyRodForce dt <|
+                               updateRod dt g.me
                    in case rt of
                        (Just (x,y)) -> case cursorTrace g.me g.platforms (x,y) of
-                                         (Just (rx, ry)) -> { g | me <- { moved | rods <- [{ x = rx, y = ry, lengthFrac = 1, state = Connecting }] } }
+                                         (Just (rx, ry)) -> { g | me <- { moved | rod <- Just { x = rx, y = ry, lengthFrac = 1, state = Connecting } } }
                                          Nothing -> { g | me <- moved }
                        Nothing -> { g | me <- moved }
 
@@ -138,7 +165,7 @@ toGameCoords : View -> Point -> Point
 toGameCoords {x,y,w,h} (px,py) = (x + px - w/2, y - py + h/2)
 
 drawRod : View -> Me -> Rod -> Form
-drawRod me v rod = traced (solid rodColour) <|
+drawRod v me rod = traced (solid rodColour) <|
                    segment (toPoint me) <|
                    lineFrac rod.lengthFrac (toPoint me) (toPoint rod)
 
@@ -164,14 +191,16 @@ cursorTrace src tgts (x,y) = let crossings = sortBy (\(Just (_,y)) -> y) <|
 
 draw : Game -> (Int, Int) -> Element
 draw g (mx, my) = collage (truncate g.view.w) (truncate g.view.h)
-                          [filled bgColour (rect g.view.w g.view.h),
-                           case cursorTrace g.me g.platforms <| toGameCoords g.view <| toFloatPoint (mx,my) of
-                               Just (x,y) -> traced (solid lightRed) (segment (toPoint g.me) (x,y))
-                               Nothing -> traced (solid <| modifyColour (Lightness, 0.8) lightRed) (segment (toPoint g.me) (toFloat mx - g.view.w/2, g.view.h/2 - toFloat my)),
-                           filledBox g.view groundColour { x = 0, y = -g.view.h/2 - meWidth/2, w = g.view.w, h = g.view.h },
-                           group <| map (filledBox g.view platformColour) g.platforms,
-                           group <| map (drawRod g.view g.me) g.me.rods,
-                           filledBox g.view meColour { x = g.me.x, y = g.me.y, w = meWidth, h = meWidth }]
+                           ([filled bgColour (rect g.view.w g.view.h),
+                            case cursorTrace g.me g.platforms <| toGameCoords g.view <| toFloatPoint (mx,my) of
+                                Just (x,y) -> traced (solid lightRed) (segment (toPoint g.me) (x,y))
+                                Nothing -> traced (solid <| modifyColour (Lightness, 0.8) lightRed) (segment (toPoint g.me) (toFloat mx - g.view.w/2, g.view.h/2 - toFloat my)),
+                            filledBox g.view groundColour { x = 0, y = -g.view.h/2 - meWidth/2, w = g.view.w, h = g.view.h },
+                            group <| map (filledBox g.view platformColour) g.platforms] ++
+                            (case g.me.rod of 
+                               (Just rod) -> [drawRod g.view g.me rod]
+                               Nothing -> []) ++
+                            [filledBox g.view meColour { x = g.me.x, y = g.me.y, w = meWidth, h = meWidth }])
 
 -- Inputs
 inputs : Signal Inputs
