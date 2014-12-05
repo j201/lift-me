@@ -65,7 +65,7 @@ gravity = 0.3
 meMass = 200
 rodRestLength = 8
 rodElasticity = 0.001 -- not sure why it has to be so low
-damping = 0.01
+damping = 0.1
 
 connectedAcceleration : Me -> Rod -> (Float, Float)
 connectedAcceleration me rod = let theta = snd <| toPolar (rod.x - me.x, rod.y - me.y)
@@ -79,6 +79,10 @@ applyGravity dt me = if me.y == 0 then { me | dx <- 0, dy <- 0 }
                             Nothing -> { me | dy <- me.dy + gravity * dt }
                             (Just rod) -> let (ax, ay) = connectedAcceleration me rod
                                           in { me | dx <- me.dx + ax * dt, dy <- me.dy + ay * dt }
+
+applyDamping : Float -> Me -> Me
+applyDamping dt me = let velFactor = (-damping) / meMass * dt
+                     in { me | dx <- me.dx + velFactor * me.dx, dy <- me.dy + velFactor * me.dy }
 
 posDistance : Positioned a -> Positioned b -> Float
 posDistance p1 p2 = sqrt ((p1.x-p2.x) ^ 2 + (p1.y-p2.y) ^ 2)
@@ -124,6 +128,7 @@ updateMe : Float -> Maybe Point -> Game -> Game
 updateMe dt rt g = let moved = updateMoving dt <|
                                -- applyGravity dt <|
                                applyRodForce dt <|
+                               applyDamping dt <|
                                updateRod dt g.me
                    in case rt of
                        (Just (x,y)) -> case cursorTrace g.me g.platforms (x,y) of
