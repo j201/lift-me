@@ -61,7 +61,7 @@ initial = { view = defaultView,
 
 -- Physics
 
-gravity = 0.3
+gravity = 0.0004
 meMass = 200
 rodRestLength = 8
 rodElasticity = 0.001 -- not sure why it has to be so low
@@ -74,11 +74,7 @@ connectedAcceleration me rod = let theta = snd <| toPolar (rod.x - me.x, rod.y -
                                              if cost > 0 then theta - (pi/2) else theta + (pi/2))
 
 applyGravity : Float -> Me -> Me
-applyGravity dt me = if me.y == 0 then { me | dx <- 0, dy <- 0 }
-                     else case me.rod of
-                            Nothing -> { me | dy <- me.dy + gravity * dt }
-                            (Just rod) -> let (ax, ay) = connectedAcceleration me rod
-                                          in { me | dx <- me.dx + ax * dt, dy <- me.dy + ay * dt }
+applyGravity dt me = { me | dy <- me.dy - gravity * dt }
 
 applyDamping : Float -> Me -> Me
 applyDamping dt me = let velFactor = (-damping) / meMass * dt
@@ -100,6 +96,11 @@ applyRodForce dt me = case me.rod of
                                          else let acc = len * rodElasticity / meMass
                                                   (ux, uy) = unitVector me rod
                                               in { me | dx <- me.dx + acc * ux * dt, dy <- me.dy + acc * uy * dt }
+
+groundCollide : Float -> Me -> Me
+groundCollide dt me = if me.y <= 0
+                      then { me | y <- 0, dy <- 0 }
+                      else me
 
 -- Updates
 
@@ -125,8 +126,9 @@ updateRod dt me = case me.rod of
                                   in { me | rod <- Just newRod }
 
 updateMe : Float -> Maybe Point -> Game -> Game
-updateMe dt rt g = let moved = updateMoving dt <|
-                               -- applyGravity dt <|
+updateMe dt rt g = let moved = groundCollide dt <|
+                               updateMoving dt <|
+                               applyGravity dt <|
                                applyRodForce dt <|
                                applyDamping dt <|
                                updateRod dt g.me
