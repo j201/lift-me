@@ -4,6 +4,8 @@ import ColorUtils(..)
 import Mouse
 import Debug
 import Maybe
+import Generator
+import Generator.Standard(..)
 
 log x = Debug.log (show x) x
 
@@ -25,7 +27,7 @@ type Platform = MovingBox {}
 
 type View = Box {}
 
-type Game = { view: View, me: Me, platforms: [Platform], timeSinceAdded: Time }
+type Game = { view: View, me: Me, platforms: [Platform], timeSinceAdded: Time, randGen: Generator.Generator Standard }
 
 type Inputs = { dt: Float, rodTarget: Maybe Point }
 
@@ -34,7 +36,7 @@ overlap a b = let linearOverlap s1 e1 s2 e2 = (s1 <= s2 && e1 >= s2) || (s2 <= s
               in linearOverlap a.x (a.x + a.w) b.x (b.x + b.w) &&
                  linearOverlap a.y (a.y + a.h) b.y (b.y + b.h)
 
-timeBetweenPlatforms = 6000
+timeBetweenPlatforms = 1000
 platformSpeed = 0.05
 
 biggestHole : [Float] -> (Float, Float)
@@ -47,8 +49,8 @@ biggestHole = let size (x, y) = y - x
                                                    else candidate
               in bhSorted << sort 
 
-canvasWidth = 600
-canvasHeight = 400
+canvasWidth = 1000
+canvasHeight = 600
 
 defaultView = { x = 0, y = 0, w = canvasWidth, h = canvasHeight }
 
@@ -57,13 +59,14 @@ initial = { view = defaultView,
             me = { x = 0, y = 0, dx = 0, dy = 0, rod = Nothing },
             platforms = [{ x = 0, y = 100, dx = -platformSpeed, dy = 0, w = 100, h = 10 },
                          { x = 50, y = 150, dx = -platformSpeed, dy = 0, w = 300, h = 10 }],
-            timeSinceAdded = timeBetweenPlatforms }
+            timeSinceAdded = timeBetweenPlatforms,
+            randGen = generator 0}
 
 -- Physics
 
 gravity = 0.0004
 meMass = 200
-rodRestLength = 8
+rodRestLength = 60
 rodElasticity = 0.001 -- not sure why it has to be so low
 damping = 0.1
 
@@ -106,18 +109,20 @@ groundCollide dt me = if me.y <= 0
 
 removeInvisible : View -> [Box a] -> [Box a]
 removeInvisible v = filter (\b -> b.x + b.w/2 > v.x - v.w/2 &&
-                                  b.x - b.w/2 < v.x + v.w/2 &&
-                                  b.y + b.h/2 > v.y - v.h/2 &&
-                                  b.y - b.h/2 < v.y + v.h/2)
+                                  b.x - b.w/2 < v.x + v.w/2)
 
 -- Remove any invisible platforms, add new ones if there's space, move the rest
 updatePlatforms : Float -> Game -> Game
 updatePlatforms dt g = let shouldAddNew = g.timeSinceAdded >= timeBetweenPlatforms
-                           addNew ps = if shouldAddNew
-                                       then { x = g.view.w/2 + 75, y = 100, dx = -platformSpeed, dy = 0, w = 150, h = 10 } :: ps
-                                       else ps
-                       in { g | platforms <- addNew <| removeInvisible g.view <| map (updateMoving dt) g.platforms,
-                                timeSinceAdded <- if shouldAddNew then 0 else g.timeSinceAdded + dt}
+                           newTime = if shouldAddNew then 0 else g.timeSinceAdded + dt
+                       in if shouldAddNew
+                          then let (randVal, gen') = Generator.float g.randGen
+                                   addNew ps = { x = g.view.w/2 + 75, y = 50 + randVal * 200 + g.view.y, dx = -platformSpeed, dy = 0, w = 150, h = 10 } :: ps
+                               in { g | platforms <- addNew <| removeInvisible g.view <| map (updateMoving dt) g.platforms,
+                                        timeSinceAdded <- newTime,
+                                        randGen <- gen'}
+                          else { g | platforms <- removeInvisible g.view <| map (updateMoving dt) g.platforms,
+                                     timeSinceAdded <- newTime } 
 
 updateRod : Float -> Me -> Me
 updateRod dt me = case me.rod of
@@ -126,20 +131,28 @@ updateRod dt me = case me.rod of
                                   in { me | rod <- Just newRod }
 
 updateMe : Float -> Maybe Point -> Game -> Game
-updateMe dt rt g = let moved = groundCollide dt <|
-                               updateMoving dt <|
-                               applyGravity dt <|
-                               applyRodForce dt <|
-                               applyDamping dt <|
-                               updateRod dt g.me
+updateMe dt rt g = let moved = g.me |>
+                               updateRod dt |>
+                               applyDamping dt |>
+                               applyRodForce dt |>
+                               applyGravity dt |>
+                               updateMoving dt |>
+                               groundCollide dt
                    in case rt of
                        (Just (x,y)) -> case cursorTrace g.me g.platforms (x,y) of
                                          (Just (rx, ry)) -> { g | me <- { moved | rod <- Just { x = rx, y = ry, lengthFrac = 1, state = Connecting } } }
                                          Nothing -> { g | me <- moved }
                        Nothing -> { g | me <- moved }
 
+updateView : Game -> Game
+updateView g = let view = g.view
+                   newView = { view | x <- min (g.me.x + 100) g.view.x,
+                                      y <- g.me.y }
+               in { g | view <- newView }
+
 runGame : Inputs -> Game -> Game
-runGame {dt, rodTarget} g = updatePlatforms dt <|
+runGame {dt, rodTarget} g = updateView <|
+                            updatePlatforms dt <|
                             updateMe dt (Maybe.map (toGameCoords g.view) rodTarget) g
 
 -- Drawing
@@ -171,10 +184,12 @@ toFloatPoint (x,y) = (toFloat x, toFloat y)
 toGameCoords : View -> Point -> Point
 toGameCoords {x,y,w,h} (px,py) = (x + px - w/2, y - py + h/2)
 
+removeOffset : View -> Positioned a -> Positioned a
+removeOffset v p = { p | y <- p.y - v.y, x <- p.x - v.x }
+
 drawRod : View -> Me -> Rod -> Form
 drawRod v me rod = traced (solid rodColour) <|
-                   segment (toPoint me) <|
-                   lineFrac rod.lengthFrac (toPoint me) (toPoint rod)
+                   segment (toPoint <| removeOffset v me) (toPoint <| removeOffset v rod)
 
 -- infinity issues?
 lineInverse : Point -> Point -> Float -> Float
@@ -196,12 +211,13 @@ cursorTrace src tgts (x,y) = let crossings = sortBy (\(Just (_,y)) -> y) <|
                                 then Nothing
                                 else head crossings
 
+-- TODO: clean this up
 draw : Game -> (Int, Int) -> Element
 draw g (mx, my) = collage (truncate g.view.w) (truncate g.view.h)
                            ([filled bgColour (rect g.view.w g.view.h),
                             case cursorTrace g.me g.platforms <| toGameCoords g.view <| toFloatPoint (mx,my) of
-                                Just (x,y) -> traced (solid lightRed) (segment (toPoint g.me) (x,y))
-                                Nothing -> traced (solid <| modifyColour (Lightness, 0.8) lightRed) (segment (toPoint g.me) (toFloat mx - g.view.w/2, g.view.h/2 - toFloat my)),
+                                Just (x,y) -> traced (solid lightRed) (segment (toPoint <| removeOffset g.view g.me) (x - g.view.x, y - g.view.y))
+                                Nothing -> traced (solid <| modifyColour (Lightness, 0.8) lightRed) (segment (toPoint <| removeOffset g.view g.me) (toFloat mx - g.view.w/2, g.view.h/2 - toFloat my)),
                             filledBox g.view groundColour { x = 0, y = -g.view.h/2 - meWidth/2, w = g.view.w, h = g.view.h },
                             group <| map (filledBox g.view platformColour) g.platforms] ++
                             (case g.me.rod of 
