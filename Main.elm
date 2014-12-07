@@ -36,8 +36,9 @@ overlap a b = let linearOverlap s1 e1 s2 e2 = (s1 <= s2 && e1 >= s2) || (s2 <= s
               in linearOverlap a.x (a.x + a.w) b.x (b.x + b.w) &&
                  linearOverlap a.y (a.y + a.h) b.y (b.y + b.h)
 
-timeBetweenPlatforms = 1000
+timeBetweenPlatforms = 700
 platformSpeed = 0.05
+platformWidth = 100
 
 biggestHole : [Float] -> (Float, Float)
 biggestHole = let size (x, y) = y - x
@@ -117,7 +118,7 @@ updatePlatforms dt g = let shouldAddNew = g.timeSinceAdded >= timeBetweenPlatfor
                            newTime = if shouldAddNew then 0 else g.timeSinceAdded + dt
                        in if shouldAddNew
                           then let (randVal, gen') = Generator.float g.randGen
-                                   addNew ps = { x = g.view.w/2 + 75, y = 50 + randVal * 200 + g.view.y, dx = -platformSpeed, dy = 0, w = 150, h = 10 } :: ps
+                                   addNew ps = { x = g.view.w/2 + platformWidth/2 + g.view.x, y = 50 + randVal * 200 + g.view.y, dx = -platformSpeed, dy = 0, w = platformWidth, h = 10 } :: ps
                                in { g | platforms <- addNew <| removeInvisible g.view <| map (updateMoving dt) g.platforms,
                                         timeSinceAdded <- newTime,
                                         randGen <- gen'}
