@@ -36,8 +36,8 @@ overlap a b = let linearOverlap s1 e1 s2 e2 = (s1 <= s2 && e1 >= s2) || (s2 <= s
               in linearOverlap a.x (a.x + a.w) b.x (b.x + b.w) &&
                  linearOverlap a.y (a.y + a.h) b.y (b.y + b.h)
 
-timeBetweenPlatforms = 700
-platformSpeed = 0.05
+platformSpeed = 0.1
+timeBetweenPlatforms = 35/platformSpeed
 platformWidth = 100
 
 biggestHole : [Float] -> (Float, Float)
@@ -166,10 +166,10 @@ filledBox v c b = rect b.w b.h |>
                   move (b.x - v.x, b.y - v.y)
 
 meWidth = 30
-meColour = lightOrange
+meColour = rgb 120 130 200
 rodColour = lightBlue
-bgColour = lightGrey
-groundColour = grey
+bgColour = rgb 235 235 240
+groundColour = rgb 100 100 110
 platformColour = charcoal
 
 lineFrac : Float -> Point -> Point -> Point
