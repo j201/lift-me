@@ -142,12 +142,12 @@ updateMe dt rt g = let moved = g.me |>
                    in case rt of
                        (Just (x,y)) -> case cursorTrace g.me g.platforms (x,y) of
                                          (Just (rx, ry)) -> { g | me <- { moved | rod <- Just { x = rx, y = ry, lengthFrac = 1, state = Connecting } } }
-                                         Nothing -> { g | me <- moved }
+                                         Nothing -> { g | me <- { moved | rod <- Nothing } }
                        Nothing -> { g | me <- moved }
 
 updateView : Game -> Game
 updateView g = let view = g.view
-                   newView = { view | x <- min (g.me.x + 100) g.view.x,
+                   newView = { view | x <- max (g.me.x - 100) g.view.x,
                                       y <- g.me.y }
                in { g | view <- newView }
 
@@ -213,18 +213,20 @@ cursorTrace src tgts (x,y) = let crossings = sortBy (\(Just (_,y)) -> y) <|
                                 else head crossings
 
 -- TODO: clean this up
-draw : Game -> (Int, Int) -> Element
-draw g (mx, my) = collage (truncate g.view.w) (truncate g.view.h)
-                           ([filled bgColour (rect g.view.w g.view.h),
-                            case cursorTrace g.me g.platforms <| toGameCoords g.view <| toFloatPoint (mx,my) of
-                                Just (x,y) -> traced (solid lightRed) (segment (toPoint <| removeOffset g.view g.me) (x - g.view.x, y - g.view.y))
-                                Nothing -> traced (solid <| modifyColour (Lightness, 0.8) lightRed) (segment (toPoint <| removeOffset g.view g.me) (toFloat mx - g.view.w/2, g.view.h/2 - toFloat my)),
-                            filledBox g.view groundColour { x = 0, y = -g.view.h/2 - meWidth/2, w = g.view.w, h = g.view.h },
-                            group <| map (filledBox g.view platformColour) g.platforms] ++
-                            (case g.me.rod of 
-                               (Just rod) -> [drawRod g.view g.me rod]
-                               Nothing -> []) ++
-                            [filledBox g.view meColour { x = g.me.x, y = g.me.y, w = meWidth, h = meWidth }])
+draw : Game -> Int -> (Int, Int) -> Element
+draw g score (mx, my) = collage (truncate g.view.w) (truncate g.view.h)
+                                ([filled bgColour (rect g.view.w g.view.h),
+                                 case cursorTrace g.me g.platforms <| toGameCoords g.view <| toFloatPoint (mx,my) of
+                                     Just (x,y) -> traced (solid lightRed) (segment (toPoint <| removeOffset g.view g.me) (x - g.view.x, y - g.view.y))
+                                     Nothing -> traced (solid <| modifyColour (Lightness, 0.8) lightRed) (segment (toPoint <| removeOffset g.view g.me) (toFloat mx - g.view.w/2, g.view.h/2 - toFloat my)),
+                                 filledBox g.view groundColour { x = 0, y = -g.view.h/2 - meWidth/2, w = g.view.w, h = g.view.h },
+                                 group <| map (filledBox g.view platformColour) g.platforms] ++
+                                 (case g.me.rod of 
+                                    (Just rod) -> [drawRod g.view g.me rod]
+                                    Nothing -> []) ++
+                                 [filledBox g.view meColour { x = g.me.x, y = g.me.y, w = meWidth, h = meWidth }] ++
+                                 [plainText (show <| truncate g.me.y) |> toForm |> move (-400, 250),
+                                  plainText (show score) |> toForm |> move (-400, 270)])
 
 -- Inputs
 inputs : Signal Inputs
@@ -238,5 +240,9 @@ inputs = let ticker = fps 30
                          (Nothing, (0, 0))
                          (sampleOn ticker <| sampleOn Mouse.clicks Mouse.position))
 
+score : Signal Game -> Signal Int
+score g = foldp max 0 (lift (.me >> .y >> truncate) g)
+
 main : Signal Element
-main = lift2 draw (foldp (<|) initial (lift runGame inputs)) Mouse.position
+main = let game = foldp (<|) initial (lift runGame inputs)
+       in lift3 draw game (score game) Mouse.position
