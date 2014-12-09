@@ -21,7 +21,7 @@ updateMoving dt p = { p | x <- p.x + dt * p.dx,
 data RodState = Connecting | Connected | Disconnecting
 type Rod = Positioned { lengthFrac: Float, state: RodState }
 
-type Me = Moving { rod: Maybe Rod }
+type Me = Moving { rod: Maybe Rod, stunTime: Time }
 
 type Platform = MovingBox {}
 
@@ -36,7 +36,7 @@ overlap a b = let linearOverlap s1 e1 s2 e2 = (s1 <= s2 && e1 >= s2) || (s2 <= s
               in linearOverlap a.x (a.x + a.w) b.x (b.x + b.w) &&
                  linearOverlap a.y (a.y + a.h) b.y (b.y + b.h)
 
-platformSpeed = 0.1
+platformSpeed = 0.15
 timeBetweenPlatforms = 35/platformSpeed
 platformWidth = 100
 
@@ -57,9 +57,8 @@ defaultView = { x = 0, y = 0, w = canvasWidth, h = canvasHeight }
 
 initial : Game
 initial = { view = defaultView,
-            me = { x = 0, y = 0, dx = 0, dy = 0, rod = Nothing },
-            platforms = [{ x = 0, y = 100, dx = -platformSpeed, dy = 0, w = 100, h = 10 },
-                         { x = 50, y = 150, dx = -platformSpeed, dy = 0, w = 300, h = 10 }],
+            me = { x = 0, y = 0, dx = 0, dy = 0, rod = Nothing, stunTime = 0 },
+            platforms = [],
             timeSinceAdded = timeBetweenPlatforms,
             randGen = generator 0}
 
@@ -70,6 +69,7 @@ meMass = 200
 rodRestLength = 60
 rodElasticity = 0.001 -- not sure why it has to be so low
 damping = 0.1
+barrierStunTime = 3000
 
 connectedAcceleration : Me -> Rod -> (Float, Float)
 connectedAcceleration me rod = let theta = snd <| toPolar (rod.x - me.x, rod.y - me.y)
@@ -101,9 +101,16 @@ applyRodForce dt me = case me.rod of
                                                   (ux, uy) = unitVector me rod
                                               in { me | dx <- me.dx + acc * ux * dt, dy <- me.dy + acc * uy * dt }
 
-groundCollide : Float -> Me -> Me
-groundCollide dt me = if me.y <= 0
+groundCollide : Me -> Me
+groundCollide me = if me.y <= 0
                       then { me | y <- 0, dy <- 0 }
+                      else me
+
+viewCollide: Float -> View -> Me -> Me
+viewCollide dt v me = if me.x <= v.x - v.w/2 && me.dx <= 0
+                      then { me | x <- v.x - v.w/2, dx <- 0,
+                                  rod <- Nothing,
+                                  stunTime <- if me.dx < 0 then barrierStunTime else me.stunTime }
                       else me
 
 -- Updates
@@ -131,17 +138,24 @@ updateRod dt me = case me.rod of
                     (Just rod) -> let newRod = { rod | x <- rod.x - platformSpeed * dt }
                                   in { me | rod <- Just newRod }
 
+updateStun : Float -> Me -> Me
+updateStun dt me = { me | stunTime <- max 0 (me.stunTime - dt) }
+
 updateMe : Float -> Maybe Point -> Game -> Game
 updateMe dt rt g = let moved = g.me |>
+                               updateStun dt |>
                                updateRod dt |>
                                applyDamping dt |>
                                applyRodForce dt |>
                                applyGravity dt |>
                                updateMoving dt |>
-                               groundCollide dt
+                               groundCollide |>
+                               viewCollide dt g.view
                    in case rt of
                        (Just (x,y)) -> case cursorTrace g.me g.platforms (x,y) of
-                                         (Just (rx, ry)) -> { g | me <- { moved | rod <- Just { x = rx, y = ry, lengthFrac = 1, state = Connecting } } }
+                                         (Just (rx, ry)) -> { g | me <- { moved | rod <- if g.me.stunTime > 0
+                                                                                         then Nothing
+                                                                                         else Just { x = rx, y = ry, lengthFrac = 1, state = Connecting } } }
                                          Nothing -> { g | me <- { moved | rod <- Nothing } }
                        Nothing -> { g | me <- moved }
 
@@ -167,10 +181,15 @@ filledBox v c b = rect b.w b.h |>
 
 meWidth = 30
 meColour = rgb 120 130 200
+meStunnedColour = rgb 200 120 130
 rodColour = lightBlue
 bgColour = rgb 235 235 240
 groundColour = rgb 100 100 110
 platformColour = charcoal
+barrierWidth = 20
+barrierFlashPeriod = 1000
+barrierGrad t = linear (0,0) (barrierWidth-10,0) [(0, rgba 255 0 0 (0.25 * sin (toFloat (truncate t % barrierFlashPeriod) * 2 * pi / barrierFlashPeriod) + 0.25)),
+                                                  (1, rgba 255 00 0 0)]
 
 lineFrac : Float -> Point -> Point -> Point
 lineFrac frac (x1, y1) (x2, y2) = (x1 + (x2 - x1) * frac,
@@ -191,6 +210,11 @@ removeOffset v p = { p | y <- p.y - v.y, x <- p.x - v.x }
 drawRod : View -> Me -> Rod -> Form
 drawRod v me rod = traced (solid rodColour) <|
                    segment (toPoint <| removeOffset v me) (toPoint <| removeOffset v rod)
+
+barrier : Time -> Form
+barrier t = rect barrierWidth canvasHeight |>
+            gradient (barrierGrad t) |>
+            moveX (-canvasWidth/2)
 
 -- infinity issues?
 lineInverse : Point -> Point -> Float -> Float
@@ -213,20 +237,25 @@ cursorTrace src tgts (x,y) = let crossings = sortBy (\(Just (_,y)) -> y) <|
                                 else head crossings
 
 -- TODO: clean this up
-draw : Game -> Int -> (Int, Int) -> Element
-draw g score (mx, my) = collage (truncate g.view.w) (truncate g.view.h)
-                                ([filled bgColour (rect g.view.w g.view.h),
-                                 case cursorTrace g.me g.platforms <| toGameCoords g.view <| toFloatPoint (mx,my) of
-                                     Just (x,y) -> traced (solid lightRed) (segment (toPoint <| removeOffset g.view g.me) (x - g.view.x, y - g.view.y))
-                                     Nothing -> traced (solid <| modifyColour (Lightness, 0.8) lightRed) (segment (toPoint <| removeOffset g.view g.me) (toFloat mx - g.view.w/2, g.view.h/2 - toFloat my)),
-                                 filledBox g.view groundColour { x = 0, y = -g.view.h/2 - meWidth/2, w = g.view.w, h = g.view.h },
-                                 group <| map (filledBox g.view platformColour) g.platforms] ++
-                                 (case g.me.rod of 
-                                    (Just rod) -> [drawRod g.view g.me rod]
-                                    Nothing -> []) ++
-                                 [filledBox g.view meColour { x = g.me.x, y = g.me.y, w = meWidth, h = meWidth }] ++
-                                 [plainText (show <| truncate g.me.y) |> toForm |> move (-400, 250),
-                                  plainText (show score) |> toForm |> move (-400, 270)])
+draw : Game -> Int -> Time -> (Int, Int) -> Element
+draw g score t (mx, my) = collage (truncate g.view.w) (truncate g.view.h)
+                                  ([filled bgColour (rect g.view.w g.view.h)] ++
+                                   (if g.me.stunTime > 0
+                                    then []
+                                    else [case cursorTrace g.me g.platforms <| toGameCoords g.view <| toFloatPoint (mx,my) of
+                                            Just (x,y) -> traced (solid lightRed) (segment (toPoint <| removeOffset g.view g.me) (x - g.view.x, y - g.view.y))
+                                            Nothing -> traced (solid <| modifyColour (Lightness, 0.8) lightRed) (segment (toPoint <| removeOffset g.view g.me) (toFloat mx - g.view.w/2, g.view.h/2 - toFloat my))]) ++
+                                   [filledBox g.view groundColour { x = 0, y = -g.view.h/2 - meWidth/2, w = g.view.w, h = g.view.h }] ++
+                                    map (filledBox g.view platformColour) g.platforms ++
+                                    (case g.me.rod of 
+                                       (Just rod) -> [drawRod g.view g.me rod]
+                                       Nothing -> []) ++
+                                    [filledBox g.view
+                                               (if g.me.stunTime > 0 then blend (g.me.stunTime/barrierStunTime) meStunnedColour meColour else meColour)
+                                               { x = g.me.x, y = g.me.y, w = meWidth, h = meWidth }] ++
+                                    [barrier t] ++
+                                    [plainText (show <| truncate g.me.y) |> toForm |> move (-400, 250),
+                                     plainText (show score) |> toForm |> move (-400, 270)])
 
 -- Inputs
 inputs : Signal Inputs
@@ -243,6 +272,8 @@ inputs = let ticker = fps 30
 score : Signal Game -> Signal Int
 score g = foldp max 0 (lift (.me >> .y >> truncate) g)
 
+sampleTime s = lift fst <| timestamp s
+
 main : Signal Element
 main = let game = foldp (<|) initial (lift runGame inputs)
-       in lift3 draw game (score game) Mouse.position
+       in draw <~ game ~ (score game) ~ (sampleTime game) ~ Mouse.position
