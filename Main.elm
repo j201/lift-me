@@ -36,9 +36,10 @@ overlap a b = let linearOverlap s1 e1 s2 e2 = (s1 <= s2 && e1 >= s2) || (s2 <= s
               in linearOverlap a.x (a.x + a.w) b.x (b.x + b.w) &&
                  linearOverlap a.y (a.y + a.h) b.y (b.y + b.h)
 
-platformSpeed = 0.15
+platformSpeed = 0.2
 timeBetweenPlatforms = 35/platformSpeed
 platformWidth = 100
+maxRodLength = 1000
 
 biggestHole : [Float] -> (Float, Float)
 biggestHole = let size (x, y) = y - x
@@ -103,7 +104,7 @@ applyRodForce dt me = case me.rod of
 
 groundCollide : Me -> Me
 groundCollide me = if me.y <= 0
-                      then { me | y <- 0, dy <- 0 }
+                      then { me | y <- 0, dy <- 0, dx <- 0 }
                       else me
 
 viewCollide: Float -> View -> Me -> Me
@@ -229,7 +230,9 @@ findXCrossing src (x,y) tgt = let xCrossing = lineInverse (src.x, src.y) (x,y) t
                                  else Nothing
 
 cursorTrace : Positioned a -> [Box b] -> Point -> Maybe Point
-cursorTrace src tgts (x,y) = let crossings = sortBy (\(Just (_,y)) -> y) <|
+cursorTrace src tgts (x,y) = let inRange (x,y) = sqrt ((src.x - x) ^ 2 + (src.y - y) ^ 2) < maxRodLength
+                                 crossings = sortBy (\(Just (_,y)) -> y) <|
+                                             filter (\(Just p) -> inRange p) <|
                                              filter ((/=) Nothing) <|
                                              map (findXCrossing src (x,y)) tgts
                              in if crossings == []
