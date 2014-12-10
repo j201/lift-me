@@ -37,8 +37,9 @@ overlap a b = let linearOverlap s1 e1 s2 e2 = (s1 <= s2 && e1 >= s2) || (s2 <= s
               in linearOverlap a.x (a.x + a.w) b.x (b.x + b.w) &&
                  linearOverlap a.y (a.y + a.h) b.y (b.y + b.h)
 
-platformSpeed = 0.2
-timeBetweenPlatforms = 35/platformSpeed
+platformSpeedIncreaseFactor = 0.02
+platformSpeed h = 0.2 * (h * platformSpeedIncreaseFactor  + 100) / 100
+timeBetweenPlatforms h = 35/(platformSpeed h)
 platformWidth = 100
 maxRodLength = 1000
 
@@ -61,7 +62,7 @@ initial : Game
 initial = { view = defaultView,
             me = { x = 0, y = 0, dx = 0, dy = 0, rod = Nothing, stunTime = 0, lastRod = 0, lastCancel = 0 },
             platforms = [],
-            timeSinceAdded = timeBetweenPlatforms,
+            timeSinceAdded = timeBetweenPlatforms 0,
             randGen = generator 0}
 
 -- Physics
@@ -123,11 +124,11 @@ removeInvisible v = filter (\b -> b.x + b.w/2 > v.x - v.w/2 &&
 
 -- Remove any invisible platforms, add new ones if there's space, move the rest
 updatePlatforms : Float -> Game -> Game
-updatePlatforms dt g = let shouldAddNew = g.timeSinceAdded >= timeBetweenPlatforms
+updatePlatforms dt g = let shouldAddNew = g.timeSinceAdded >= timeBetweenPlatforms g.me.y
                            newTime = if shouldAddNew then 0 else g.timeSinceAdded + dt
                        in if shouldAddNew
                           then let (randVal, gen') = Generator.float g.randGen
-                                   addNew ps = { x = g.view.w/2 + platformWidth/2 + g.view.x, y = 50 + randVal * 200 + g.view.y, dx = -platformSpeed, dy = 0, w = platformWidth, h = 10 } :: ps
+                                   addNew ps = { x = g.view.w/2 + platformWidth/2 + g.view.x, y = 50 + randVal * 200 + g.view.y, dx = -(platformSpeed g.me.y), dy = 0, w = platformWidth, h = 10 } :: ps
                                in { g | platforms <- addNew <| removeInvisible g.view <| map (updateMoving dt) g.platforms,
                                         timeSinceAdded <- newTime,
                                         randGen <- gen'}
@@ -137,7 +138,7 @@ updatePlatforms dt g = let shouldAddNew = g.timeSinceAdded >= timeBetweenPlatfor
 updateRod : Float -> Me -> Me
 updateRod dt me = case me.rod of
                     Nothing -> me
-                    (Just rod) -> let newRod = { rod | x <- rod.x - platformSpeed * dt }
+                    (Just rod) -> let newRod = { rod | x <- rod.x - (platformSpeed me.y) * dt }
                                   in { me | rod <- Just newRod }
 
 updateStun : Float -> Me -> Me
