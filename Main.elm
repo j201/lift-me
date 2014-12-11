@@ -22,7 +22,7 @@ updateMoving dt p = { p | x <- p.x + dt * p.dx,
 data RodState = Connecting | Connected | Disconnecting
 type Rod = Positioned { lengthFrac: Float, state: RodState }
 
-type Me = Moving { rod: Maybe Rod, stunTime: Time, lastRod: Time, lastCancel: Time }
+type Me = Moving { rod: Maybe Rod, stunTime: Time, lastMouseDown: Bool }
 
 type Platform = MovingBox {}
 
@@ -30,7 +30,7 @@ type View = Box {}
 
 type Game = { view: View, me: Me, platforms: [Platform], timeSinceAdded: Time, randGen: Generator.Generator Standard }
 
-type Inputs = { dt: Float, rodTarget: (Time, Point), cancelRod: Time }
+type Inputs = { dt: Float, rodTarget: (Bool, Point) }
 
 overlap : Box a -> Box b -> Bool
 overlap a b = let linearOverlap s1 e1 s2 e2 = (s1 <= s2 && e1 >= s2) || (s2 <= s1 && e2 >= s1) 
@@ -60,7 +60,7 @@ defaultView = { x = 0, y = 0, w = canvasWidth, h = canvasHeight }
 
 initial : Game
 initial = { view = defaultView,
-            me = { x = 0, y = 0, dx = 0, dy = 0, rod = Nothing, stunTime = 0, lastRod = 0, lastCancel = 0 },
+            me = { x = 0, y = 0, dx = 0, dy = 0, rod = Nothing, stunTime = 0, lastMouseDown = False },
             platforms = [],
             timeSinceAdded = timeBetweenPlatforms 0,
             randGen = generator 0}
@@ -144,8 +144,8 @@ updateRod dt me = case me.rod of
 updateStun : Float -> Me -> Me
 updateStun dt me = { me | stunTime <- max 0 (me.stunTime - dt) }
 
-updateMe : Float -> (Time, Point) -> Time -> Game -> Game
-updateMe dt (rt, rp) ct g = let moved = g.me |>
+updateMe : Float -> (Bool, Point) -> Game -> Game
+updateMe dt (rb, rp) g = let moved = g.me |>
                                      updateStun dt |>
                                      updateRod dt |>
                                      applyDamping dt |>
@@ -154,19 +154,16 @@ updateMe dt (rt, rp) ct g = let moved = g.me |>
                                      updateMoving dt |>
                                      groundCollide |>
                                      viewCollide dt g.view
-                                rodHandled = if rt == moved.lastRod -- TODO: move into function
-                                             then moved
-                                             else case cursorTrace g.me g.platforms rp of
-                                                    (Just (rx, ry)) -> { moved | rod <- if g.me.stunTime > 0
-                                                                                        then Nothing
-                                                                                        else Just { x = rx, y = ry, lengthFrac = 1, state = Connecting },
-                                                                                 lastRod <- rt }
-                                                    Nothing -> { moved | rod <- Nothing,
-                                                                         lastRod <- rt }
-                                cancelHandled = if ct == rodHandled.lastCancel
-                                                then rodHandled
-                                                else { rodHandled | rod <- Nothing, lastCancel <- ct }
-                            in { g | me <- cancelHandled }
+                             rodHandled = if | rb == g.me.lastMouseDown -> moved
+                                             | rb == False -> { moved | rod <- Nothing, lastMouseDown <- False }
+                                             | otherwise -> case cursorTrace g.me g.platforms rp of
+                                                 (Just (rx, ry)) -> { moved | rod <- if g.me.stunTime > 0
+                                                                                     then Nothing
+                                                                                     else Just { x = rx, y = ry, lengthFrac = 1, state = Connecting },
+                                                                              lastMouseDown <- True }
+                                                 Nothing -> { moved | rod <- Nothing,
+                                                                      lastMouseDown <- True }
+                         in { g | me <- rodHandled }
 
 updateView : Game -> Game
 updateView g = let view = g.view
@@ -175,9 +172,9 @@ updateView g = let view = g.view
                in { g | view <- newView }
 
 runGame : Inputs -> Game -> Game
-runGame {dt, rodTarget, cancelRod } g = updateView <|
-                                        updatePlatforms dt <|
-                                        updateMe dt ((\(t, r) -> (t, toGameCoords g.view r)) rodTarget) cancelRod g
+runGame {dt, rodTarget} g = updateView <|
+                            updatePlatforms dt <|
+                            updateMe dt ((\(b, r) -> (b, toGameCoords g.view r)) rodTarget) g
 
 -- Drawing
 
@@ -277,10 +274,9 @@ toTimeSignal = lift fst << timestamp
 inputs : Signal Inputs
 inputs = let ticker = fps 30
          in sampleOn ticker <|
-                     lift3 (\dt rt cr -> { dt = dt, rodTarget = rt, cancelRod = cr })
+                     lift2 (\dt rt -> { dt = dt, rodTarget = rt })
                            ticker
-                           (timestamp <| lift toFloatPoint <| sampleOn Mouse.clicks Mouse.position)
-                           (toTimeSignal Keyboard.space)
+                           (lift2 (,) Mouse.isDown (lift toFloatPoint Mouse.position))
 
 score : Signal Game -> Signal Int
 score g = foldp max 0 (lift (.me >> .y >> truncate) g)
