@@ -90,26 +90,28 @@ updateRod dt me = case me.rod of
 updateStun : Float -> Me -> Me
 updateStun dt me = { me | stunTime <- max 0 (me.stunTime - dt) }
 
+addRod : Float -> (Bool, Point) -> Game -> Me -> Me
+addRod dt (rb, rp) g moved = if | rb == g.me.lastMouseDown -> moved
+                                | rb == False -> { moved | rod <- Nothing, lastMouseDown <- False }
+                                | otherwise -> case cursorTrace g.me g.platforms rp of
+                                    (Just (rx, ry)) -> { moved | rod <- if g.me.stunTime > 0
+                                                                        then Nothing
+                                                                        else Just { x = rx, y = ry },
+                                                                 lastMouseDown <- True }
+                                    Nothing -> { moved | rod <- Nothing,
+                                                         lastMouseDown <- True }
+
 updateMe : Float -> (Bool, Point) -> Game -> Game
-updateMe dt (rb, rp) g = let moved = g.me |>
+updateMe dt (rb, rp) g = { g | me <- g.me |>
                                      updateStun dt |>
-                                     updateRod dt |>
                                      applyDamping dt |>
                                      applyRodForce dt |>
                                      applyGravity dt |>
                                      updateMoving dt |>
                                      groundCollide |>
-                                     viewCollide dt g.view
-                             rodHandled = if | rb == g.me.lastMouseDown -> moved
-                                             | rb == False -> { moved | rod <- Nothing, lastMouseDown <- False }
-                                             | otherwise -> case cursorTrace g.me g.platforms rp of
-                                                 (Just (rx, ry)) -> { moved | rod <- if g.me.stunTime > 0
-                                                                                     then Nothing
-                                                                                     else Just { x = rx, y = ry },
-                                                                              lastMouseDown <- True }
-                                                 Nothing -> { moved | rod <- Nothing,
-                                                                      lastMouseDown <- True }
-                         in { g | me <- rodHandled }
+                                     viewCollide dt g.view |>
+                                     addRod dt (rb, rp) g |>
+                                     updateRod dt }
 
 updateView : Game -> Game
 updateView g = let view = g.view
