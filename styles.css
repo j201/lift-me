@@ -1,0 +1,85 @@
+html, body {
+	height: 100%;
+	width: 100%;
+}
+
+body {
+	background-color: #A1A7B2;
+	color: #333;
+	font-family: Coda, sans-serif;
+}
+
+#game, #splash-screen {
+	position: absolute;
+	height: 600px;
+	width: 1000px;
+	top: 50px;
+	margin: 0 auto;
+	left: 0;
+	right: 0;
+}
+
+#game {
+	z-index: 2;
+	animation-duration: 4s;
+	animation-name: splash-fade;
+	animation-fill-mode: forwards;
+	-webkit-animation-duration: 4s;
+	-webkit-animation-name: splash-fade;
+	-webkit-animation-fill-mode: forwards;
+}
+
+#game div {
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+}
+
+#splash-screen {
+	text-align: center;
+	font-family: Coda, sans-serif;
+	background-color: #E5E7EC;
+}
+
+#splash-title {
+	font-size: 5em;
+	font-weight: bold;
+	margin: 100px 0 20px 0;
+}
+
+#splash-desc {
+	font-size: 2em;
+}
+
+#instructions {
+	position: absolute;
+	width: 100%;
+	text-align: center;
+	top: 700px;
+	left: 0;
+	right: 0;
+}
+
+@keyframes splash-fade {
+	0% {
+		opacity: 0;
+	}
+	50% {
+		opacity: 0;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+@-webkit-keyframes splash-fade {
+	0% {
+		opacity: 0;
+	}
+	50% {
+		opacity: 0;
+	}
+	100% {
+		opacity: 1;
+	}
+} 

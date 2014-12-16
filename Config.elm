@@ -17,11 +17,11 @@ damping = 0.1
 barrierStunTime = 4000
 
 meWidth = 30
-meColour = rgb 120 130 200
+meColour = rgb 81 137 227
 meStunnedColour = rgb 200 120 130
-rodColour = lightBlue
-bgColour = rgb 235 235 240
-groundColour = rgb 100 100 110
+rodColour = rgb 18 102 236
+bgColour = rgb 229 231 236
+groundColour = rgb 106 115 128
 cursorTraceColour = groundColour
 platformColour = charcoal
 barrierWidth = 20

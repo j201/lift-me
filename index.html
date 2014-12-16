@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Lift Me</title>
+	<link href='http://fonts.googleapis.com/css?family=Coda' rel='stylesheet' type='text/css'>
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+	<div id="splash-screen">
+		<div id="splash-text">
+			<div id="splash-title">Lift Me</div>
+			<div id="splash-desc">A game with a swinging box</div>
+		</div>
+	</div>
+	<div id="game"></div>
+	<div id="instructions">Instructions: Click around.</div>
+	<script src="/elm-runtime.js"></script>
+	<script src="build/Main.js"></script>
+	<script>
+var div = document.getElementById('game');
+Elm.embed(Elm.Main, div);
+	</script>
+</body>
+</html>
