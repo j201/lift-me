@@ -6,16 +6,6 @@ import Text
 import Data(..)
 import Config(..)
 
-data HslUpdate = Hue | Saturation | Lightness | Alpha
-
-modifyColour : (HslUpdate, Float) -> Color -> Color
-modifyColour (param, val) c = let {hue, saturation, lightness, alpha} = toHsl c
-                              in case param of
-                                  Hue -> hsla val saturation lightness alpha
-                                  Saturation -> hsla hue val lightness alpha
-                                  Lightness -> hsla hue saturation val alpha
-                                  Alpha -> hsla hue saturation lightness val
-
 blend : Float -> Color -> Color -> Color
 blend x c1 c2 = let rgb1 = toRgb c1
                     rgb2 = toRgb c2
