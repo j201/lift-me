@@ -1,6 +1,7 @@
 module Drawing where
 
 import Maybe
+import Text
 
 import Data(..)
 import Config(..)
@@ -41,7 +42,7 @@ drawRodTrace : Game -> (Int, Int) -> Form
 drawRodTrace g (mx, my) = case cursorTrace g.me g.platforms <|
                                toGameCoords g.view <|
                                toFloatPoint (mx,my)
-                          of Just (x,y) -> traced (solid lightRed)
+                          of Just (x,y) -> traced (solid cursorTraceDetectedColour)
                                                   (segment (toPoint <| removeOffset g.view g.me)
                                                            (x - g.view.x, y - g.view.y))
                              Nothing -> traced (solid cursorTraceColour)
@@ -49,14 +50,14 @@ drawRodTrace g (mx, my) = case cursorTrace g.me g.platforms <|
                                                         (toFloat mx - g.view.w/2, g.view.h/2 - toFloat my))
 barrier : Time -> Form
 barrier t = rect barrierWidth canvasHeight |>
-            gradient (barrierGrad t) |>
+            filled (barrierFill t) |>
+            -- gradient (barrierGrad t) |>
             moveX (-canvasWidth/2)
 
--- TODO: clean this up
 draw : Game -> Int -> Time -> (Int, Int) -> Element
 draw g score t (mx, my) = collage (truncate g.view.w) (truncate g.view.h)
                                   ([filled bgColour (rect g.view.w g.view.h)] ++
-                                   (if g.me.stunTime > 0
+                                   (if g.me.stunTime > 0 || g.me.rod /= Nothing
                                     then []
                                     else [drawRodTrace g (mx,my)]) ++
                                    map (filledBox g.view platformColour) g.platforms ++
@@ -68,5 +69,5 @@ draw g score t (mx, my) = collage (truncate g.view.w) (truncate g.view.h)
                                               { x = g.me.x, y = g.me.y, w = meWidth, h = meWidth }] ++
                                    [barrier t] ++
                                    [filledBox g.view groundColour { x = g.view.x, y = -g.view.h/2 - meWidth/2, w = g.view.w, h = g.view.h }] ++
-                                   [plainText (show <| truncate g.me.y) |> toForm |> move (-400, 250),
-                                    plainText (show score) |> toForm |> move (-400, 270)])
+                                   [toText ("Height: " ++  (show <| truncate g.me.y)) |> Text.style scoreStyle |> centered |> toForm |> move (-400, 250),
+                                    toText ("Score: " ++ (show score)) |> Text.style scoreStyle |> centered |> toForm |> move (-400, 270)])

@@ -4,9 +4,13 @@ html, body {
 }
 
 body {
-	background-color: #A1A7B2;
-	color: #333;
-	font-family: Coda, sans-serif;
+	background-color: hsl(200, 40%, 70%);
+	color: hsl(200, 40%, 10%);
+	font-family: Raleway, sans-serif;
+}
+
+.strike {
+	text-decoration: line-through;
 }
 
 #game, #splash-screen {
@@ -39,8 +43,9 @@ body {
 
 #splash-screen {
 	text-align: center;
-	font-family: Coda, sans-serif;
-	background-color: #E5E7EC;
+	font-family: Raleway, sans-serif;
+	background-color: hsl(200, 100%, 20%);
+	color: hsl(200, 100%, 80%);
 }
 
 #splash-title {
@@ -60,6 +65,7 @@ body {
 	top: 700px;
 	left: 0;
 	right: 0;
+	font-size: 1.3em;
 }
 
 @keyframes splash-fade {

@@ -74,7 +74,10 @@ updatePlatforms dt g = let shouldAddNew = g.timeSinceAdded >= timeBetweenPlatfor
                            newTime = if shouldAddNew then 0 else g.timeSinceAdded + dt
                        in if shouldAddNew
                           then let (randVal, gen') = Generator.float g.randGen
-                                   addNew ps = { x = g.view.w/2 + platformWidth/2 + g.view.x, y = 50 + randVal * 200 + g.view.y, dx = -(platformSpeed g.me.y), dy = 0, w = platformWidth, h = 10 } :: ps
+                                   addNew ps = { x = g.view.w/2 + platformWidth/2 + g.view.x,
+                                                 y = 50 + randVal * 200 + g.view.y,
+                                                 dx = -(platformSpeed g.me.y),
+                                                 dy = 0, w = platformWidth, h = 10 } :: ps
                                in { g | platforms <- addNew <| removeInvisible g.view <| map (updateMoving dt) g.platforms,
                                         timeSinceAdded <- newTime,
                                         randGen <- gen'}
