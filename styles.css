@@ -27,9 +27,10 @@ body {
 	-webkit-animation-duration: 4s;
 	-webkit-animation-name: splash-fade;
 	-webkit-animation-fill-mode: forwards;
+	cursor: crosshair;
 }
 
-#game div {
+#game *, #splash-screen * {
 	-webkit-user-select: none;
 	-moz-user-select: none;
 	-ms-user-select: none;
@@ -70,6 +71,7 @@ body {
 	}
 	100% {
 		opacity: 1;
+		display: none;
 	}
 }
 @-webkit-keyframes splash-fade {
@@ -81,5 +83,6 @@ body {
 	}
 	100% {
 		opacity: 1;
+		display: none;
 	}
 } 
