@@ -452,13 +452,18 @@ Elm.Drawing.make = function (_elm) {
    var drawRod = F3(function (v,
    me,
    rod) {
-      return $Graphics$Collage.traced($Graphics$Collage.solid($Config.rodColour))(A2($Graphics$Collage.segment,
-      $Data.toPoint(A2(removeOffset,
-      v,
-      me)),
-      $Data.toPoint(A2(removeOffset,
-      v,
-      rod))));
+      return function () {
+         var rodLine = $Graphics$Collage.solid($Config.rodColour);
+         return $Graphics$Collage.traced(_U.replace([["width"
+                                                     ,2]],
+         rodLine))(A2($Graphics$Collage.segment,
+         $Data.toPoint(A2(removeOffset,
+         v,
+         me)),
+         $Data.toPoint(A2(removeOffset,
+         v,
+         rod))));
+      }();
    });
    var drawRodTrace = F2(function (g,
    _v0) {
@@ -496,10 +501,10 @@ Elm.Drawing.make = function (_elm) {
                       ,_0: $Basics.toFloat(_v0._0) - g.view.w / 2
                       ,_1: g.view.h / 2 - $Basics.toFloat(_v0._1)}));}
                  _E.Case($moduleName,
-                 "between lines 32 and 40");
+                 "between lines 33 and 41");
               }();}
          _E.Case($moduleName,
-         "between lines 32 and 40");
+         "between lines 33 and 41");
       }();
    });
    var filledBox = F3(function (v,
@@ -572,7 +577,7 @@ Elm.Drawing.make = function (_elm) {
                     case "Nothing":
                     return _L.fromArray([]);}
                  _E.Case($moduleName,
-                 "between lines 54 and 56");
+                 "between lines 59 and 61");
               }(),
               _L.append(_L.fromArray([A3(filledBox,
               g.view,
@@ -604,7 +609,7 @@ Elm.Drawing.make = function (_elm) {
                                                    ,_1: 270})($Graphics$Collage.toForm($Text.centered($Text.style($Config.scoreStyle)($Text.toText(_L.append("Score: ",
                            $String.show(score)))))))])))))))));}
          _E.Case($moduleName,
-         "between lines 48 and 63");
+         "between lines 49 and 72");
       }();
    });
    _elm.Drawing.values = {_op: _op
@@ -935,7 +940,7 @@ Elm.Config.make = function (_elm) {
    var rodColour = A3(hsv,
    30,
    90,
-   40);
+   50);
    var bgColour = A3(hsv,
    200,
    90,
