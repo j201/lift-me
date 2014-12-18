@@ -13,6 +13,16 @@ body {
 	text-decoration: line-through;
 }
 
+#gh-link {
+	margin-top: 10px;
+	font-size: 0.9em;
+	color: hsl(30, 100%, 30%);
+}
+
+#gh-link:hover {
+	color: hsl(30, 100%, 40%);
+}
+
 #game, #splash-screen {
 	position: absolute;
 	height: 600px;

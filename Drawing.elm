@@ -25,8 +25,9 @@ removeOffset : View -> Positioned a -> Positioned a
 removeOffset v p = { p | y <- p.y - v.y, x <- p.x - v.x }
 
 drawRod : View -> Me -> Rod -> Form
-drawRod v me rod = traced (solid rodColour) <|
-                   segment (toPoint <| removeOffset v me) (toPoint <| removeOffset v rod)
+drawRod v me rod = let rodLine = solid rodColour
+                   in traced { rodLine | width <- 2 } <|
+                      segment (toPoint <| removeOffset v me) (toPoint <| removeOffset v rod)
 
 drawRodTrace : Game -> (Int, Int) -> Form
 drawRodTrace g (mx, my) = case cursorTrace g.me g.platforms <|
@@ -46,18 +47,26 @@ barrier t = rect barrierWidth canvasHeight |>
 
 draw : Game -> Int -> Time -> (Int, Int) -> Element
 draw g score t (mx, my) = collage (truncate g.view.w) (truncate g.view.h)
+
                                   ([filled bgColour (rect g.view.w g.view.h)] ++
+
                                    (if g.me.stunTime > 0 || g.me.rod /= Nothing
                                     then []
                                     else [drawRodTrace g (mx,my)]) ++
+
                                    map (filledBox g.view platformColour) g.platforms ++
+
                                    (case g.me.rod of 
                                       (Just rod) -> [drawRod g.view g.me rod]
                                       Nothing -> []) ++
+
                                    [filledBox g.view
                                               (if g.me.stunTime > 0 then blend (g.me.stunTime/barrierStunTime) meStunnedColour meColour else meColour)
                                               { x = g.me.x, y = g.me.y, w = meWidth, h = meWidth }] ++
+
                                    [barrier t] ++
+
                                    [filledBox g.view groundColour { x = g.view.x, y = -g.view.h/2 - meWidth/2, w = g.view.w, h = g.view.h }] ++
+
                                    [toText ("Height: " ++  (show <| truncate g.me.y)) |> Text.style scoreStyle |> centered |> toForm |> move (-400, 250),
                                     toText ("Score: " ++ (show score)) |> Text.style scoreStyle |> centered |> toForm |> move (-400, 270)])
